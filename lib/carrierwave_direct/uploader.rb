@@ -59,7 +59,7 @@ module CarrierWaveDirect
 
     def policy(options = {})
       Base64.encode64(
-          policy_hash(options).to_json
+          policy_raw(options).to_json
       ).gsub("\n","")
     end
 
