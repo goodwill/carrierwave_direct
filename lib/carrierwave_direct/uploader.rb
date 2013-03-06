@@ -10,7 +10,7 @@ module CarrierWaveDirect
     included do
       storage :fog
 
-      attr_accessor :success_action_redirect
+      attr_accessor :success_action_redirect, :success_action_status
 
       fog_credentials.keys.each do |key|
         define_method(key) do
@@ -58,24 +58,34 @@ module CarrierWaveDirect
     end
 
     def policy(options = {})
+      Base64.encode64(
+          policy_hash(options).to_json
+      ).gsub("\n","")
+    end
+
+    def policy_raw(options={})
       options[:expiration] ||= self.class.upload_expiration
       options[:min_file_size] ||= self.class.min_file_size
       options[:max_file_size] ||= self.class.max_file_size
-      
+
       conditions = [ ["starts-with", "$utf8", ""], ["starts-with", "$key", store_dir] ]
       conditions << ["starts-with", "$Content-Type", ""] if self.class.will_include_content_type
+      conditions += [
+                {"bucket" => fog_directory},
+                {"acl" => acl},
+                ["content-length-range", options[:min_file_size], options[:max_file_size]]
+              ]
 
-      Base64.encode64(
-        {
-          'expiration' => Time.now.utc + options[:expiration],
-          'conditions' => conditions + [
-            {"bucket" => fog_directory},
-            {"acl" => acl},
-            {"success_action_redirect" => success_action_redirect},
-            ["content-length-range", options[:min_file_size], options[:max_file_size]]
-          ]
-        }.to_json
-      ).gsub("\n","")
+
+      conditions += success_action_redirect.present? ? {"success_action_redirect" => success_action_redirect} : {"success_action_status" => success_action_status || '201'}
+
+      policy_hash={
+        'expiration' => Time.now.utc + options[:expiration],
+        'conditions' => conditions
+      }
+
+      return policy_hash
+
     end
 
     def signature
